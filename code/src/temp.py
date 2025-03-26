@@ -10,6 +10,8 @@ import requests
 from util import *
 from profiliing import profile
 from rulesgeneration import generate_rules
+import time
+from dashboard import show_dashboard
 
 # Initialize session state
 if 'uploaded_rules' not in st.session_state:
@@ -162,80 +164,88 @@ def home_page():
         except Exception as e:
             st.error(f"Error reading CSV: {str(e)}")
     
-    # Analyze Button
+    # Then modify the Analyze Button section in home_page():
     if st.button("🔍 Analyze Selected Files", type="primary", use_container_width=True):
         if not st.session_state.selected_files:
             st.warning("Please select at least one rules file")
         elif not transaction_file:
             st.warning("Please upload transaction data CSV")
         else:
-            with st.spinner("Analyzing files..."):
-                # Call the profile function with selected files and transaction data
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            with st.spinner("Initializing analysis..."):
+                status_text.text("Preparing files...")
+                time.sleep(0.5)
+                progress_bar.progress(10)
+
+                status_text.text("Extracting rules content...")
+                time.sleep(0.5)
+                progress_bar.progress(30)
+
+                status_text.text("Processing transaction data...")
+                time.sleep(0.5)
+                progress_bar.progress(50)
+
+                status_text.text("Sending to DeepSeek API,it's gonna take quite some time...")
                 api_response = profile(
                     selected_files=st.session_state.selected_files,
                     transaction_file=transaction_file
                 )
-                
+                progress_bar.progress(80)
+
+                status_text.text("Processing results...")
+                time.sleep(0.5)
+                progress_bar.progress(90)
+
                 if api_response is None:
-                    st.error("Analysis failed - please check the logs")
+                    progress_bar.progress(100)
+                    status_text.error("Analysis failed - please check the logs")
+                    time.sleep(2)
+                    status_text.empty()
+                    progress_bar.empty()
                 else:
                     try:
-                        # Process the API response
-                        content = api_response.get('choices', [{}])[0].get('message', {}).get('content', '')
-                        
-                        # Store results
-                        st.session_state.analysis_result = {
-                            "files_analyzed": st.session_state.selected_files,
-                            "findings": [],
-                            "recommendations": [],
-                            "content": content,
-                            "usage": api_response.get('usage', {}),
-                            "compliance_score": "N/A",
-                            "risk_level": "To be determined"
-                        }
-                        
-                        # Try to parse structured data from response
-                        try:
-                            parsed_content = json.loads(content)
-                            if isinstance(parsed_content, dict):
-                                if 'analysis_summary' in parsed_content:
-                                    summary = parsed_content['analysis_summary']
-                                    st.session_state.analysis_result.update({
-                                        "compliance_score": summary.get("overall_risk_score", "N/A"),
-                                        "risk_level": summary.get("overall_risk_level", "To be determined")
-                                    })
-                                if 'recommendations' in parsed_content:
-                                    st.session_state.analysis_result['recommendations'] = parsed_content['recommendations']
-                        except json.JSONDecodeError:
-                            # Content is not JSON, treat as plain text
-                            st.session_state.analysis_result['content'] = content
-                        
-                        st.success("Analysis complete!")
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"Error processing API response: {str(e)}")
-    
-    # Display analysis results if available
-    if st.session_state.analysis_result:
-        st.subheader("Analysis Results")
-        st.write(f"**Files Analyzed:** {', '.join(st.session_state.analysis_result['files_analyzed'])}")
-        st.write(f"**Compliance Score:** {st.session_state.analysis_result['compliance_score']}")
-        st.write(f"**Risk Level:** {st.session_state.analysis_result['risk_level']}")
-        
-        if st.session_state.analysis_result['content']:
-            st.subheader("Detailed Analysis")
-            st.markdown(st.session_state.analysis_result['content'])
-        
-        if st.session_state.analysis_result['recommendations']:
-            st.subheader("Recommendations")
-            for rec in st.session_state.analysis_result['recommendations']:
-                st.write(f"- {rec}")
-        
-        if 'usage' in st.session_state.analysis_result:
-            st.write("**API Usage Statistics:**")
-            st.json(st.session_state.analysis_result['usage'])
+                        content = api_response.get('choices', [{}])[0].get('message', {}).get('content', '{}')
 
-# Run the app
+                        try:
+                            analysis_data = json.loads(content)
+                            st.session_state.analysis_result = analysis_data
+
+                            if 'flagged_transactions' in analysis_data:
+                                total = len(analysis_data.get('transaction_analysis', {}).get('headers', []))
+                                flagged = len(analysis_data['flagged_transactions'])
+                                analysis_data['transaction_stats'] = {
+                                    'total_transactions': total,
+                                    'flagged_count': flagged,
+                                    'failure_rate': round((flagged/total)*100, 2) if total > 0 else 0
+                                }
+
+                            analysis_data['transaction_file'] = transaction_file.name
+
+                            progress_bar.progress(100)
+                            status_text.success("Analysis complete!")
+                            time.sleep(1)
+                            status_text.empty()
+                            progress_bar.empty()
+
+                            show_dashboard(analysis_data)
+
+                        except json.JSONDecodeError:
+                            progress_bar.progress(100)
+                            status_text.error("Invalid analysis response format")
+                            st.text_area("Raw API Response", value=content, height=300)
+                            time.sleep(2)
+                            status_text.empty()
+                            progress_bar.empty()
+
+                    except Exception as e:
+                        progress_bar.progress(100)
+                        status_text.error(f"Error processing API response: {str(e)}")
+                        time.sleep(2)
+                        status_text.empty()
+                        progress_bar.empty()
+
+    # Run the app
 if __name__ == "__main__":
     home_page()
