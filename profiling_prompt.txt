@@ -1,0 +1,23 @@
+Step 1: Analyze the transaction file and extract all headers. The name of the file might be anything; you will have to infer through the data that it is a transaction file.
+Step 2: Infer the headers and data types from the transaction file. The field names might be ambiguous sometimes; in that case, infer the header name by understanding the context and the data fields' reference
+Step 3: Parse the  rules from attached regulatory document, the name of the regulatory document can be anything, look for the context and realize that its a regulatory document. look for the mention of rules or context in which the headers or similar meaning words of the transaction file are mentioned in the regulatory document
+Step 4: Go through each and every line of the attached document, especially the tables, and extract all the rules, thresholds, allowable values, context, and conditions that relate directly or even slightly to these transaction data fields.
+Step 5: Create as many rules as possible with every combination. Understand the context of the rules. Check for implicit and explicit rules, check for interdependencies of rules, and the priority of rules
+Step 6: For each rule that can be created, list that out, in case of interdependence between rules, list that out as an additional rule
+
+Step 7: Validate the transaction data beyond the rules of the federal document, for generic checks like
+a) Customer name cannot be numerical
+b) Transaction value should be in a valid format
+c) The transaction date cannot be in the future
+d) If its the same customer having multiple transactions, and any of the transaction displays an anomaly in terms of transaction amount or location or any other parameter flag it, similarly if there is a high value transaction but that customer frequently does high value transactions, flag that but also mention under reason that this customer frequently does high value transactions, so this might not necessarily be a risk, needs manual review
+e) Account balance should never be negative except in cases of overdraft accounts explicitly marked with an "OD" flag. in case of no indicator of the account being an overdraft account, flag it
+f) In case of transactions above $10000 with no remarks, flag it, unless a different threshold amount has been mentioned in the regulatory or rules document
+g) Transactions older than 365 days should trigger a data validation alert, unless a diff number of days has been mentioned in the rules
+Similar to the above rules generate at least 20 more rules dynamically based on the data, which might be a commonsense logic to validate financial data. These rules need to be generated dynamically, not hardcoded. Rules are to be generated dynamically based on the type of input data and understanding the context.
+Step 7: Define the Risk scoring mechanism, and also provide the definition of risk scoring in the output
+Step 8: Provide risk scoring and flagging of every transaction. In case the risk score is already present in the data that is provided, mention 2 risk scores in the output: the risk score of the document and the AI-generated risk score. The generated risk score should be dynamic, adjusting scores based on transaction patters and historical violations. Define risk scoring clearly with reasons, actions and any other notes
+Step 9: Segment the risks into 4 segments, credit risk, transaction risk, market risk, operational risk, give a risk score for each of these segments and an overall risk score as well, with clear definitions of each risk type
+Step 10: Provide suggestions for every flagged transaction. Suggestions can be what the auditor or banker does for the flagged transaction, including adjustments, explanations and recommended compliance steps
+Step 11: When flagging a transaction, each risk and flag should be explained adequately with action points, with references also included in the output
+for each rule state the origin of the rule either from the  document name,pageno,clause or if its generic rule
+Provide the entire output only in JSON format
