@@ -7,7 +7,9 @@ import time
 import json
 import os
 import requests
-import random
+from util import *
+from profiliing import profile
+from rulesgeneration import generate_rules
 
 # Initialize session state
 if 'uploaded_rules' not in st.session_state:
@@ -20,120 +22,10 @@ if 'viewing_file' not in st.session_state:
     st.session_state.viewing_file = None
 if 'show_results' not in st.session_state:
     st.session_state.show_results = False
+if 'analysis_result' not in st.session_state:
+    st.session_state.analysis_result = None
 
-# Helper functions
-def extract_text(file):
-    """Extract text from PDF or DOCX files"""
-    content = file.read()
-    
-    try:
-        if file.name.endswith('.pdf'):
-            pdf = PyPDF2.PdfReader(BytesIO(content))
-            return "\n".join([page.extract_text() for page in pdf.pages])
-        elif file.name.endswith('.docx'):
-            doc = Document(BytesIO(content))
-            return "\n".join([para.text for para in doc.paragraphs])
-        else:
-            return content.decode('utf-8')
-    except Exception as e:
-        st.error(f"Error reading {file.name}: {str(e)}")
-        return None
 
-def generate_rules(file):
-    """Send file to DeepSeek API with prompt from rules_prompt.txt"""
-    # Read the prompt template
-    try:
-        with open("rules_prompt.txt", "r", encoding="utf-8") as f:
-            prompt = f.read().strip()
-    except FileNotFoundError:
-        prompt = "Please analyze this document and extract all relevant rules and regulations."
-        st.warning("Using default prompt (rules_prompt.txt not found)")
-
-    # Extract text from file
-    file_content = extract_text(file)
-    if not file_content:
-        st.error(f"Failed to extract text from {file.name}")
-        return None
-
-    # Prepare API request using secrets
-    headers = {
-        "Authorization": f"Bearer {st.secrets['API_KEY']}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": st.secrets['MODEL'],
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt,
-                "file_name": file.name,
-                "file_content": file_content
-            }
-        ],
-        "temperature": 0.7,
-        "max_tokens": 8000
-    }
-
-    try:
-        with st.spinner(f"Sending {file.name} to API..."):
-            response = requests.post(
-                st.secrets['API_URL'],
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
-            response.raise_for_status()
-            
-            result = response.json()
-            print(response.json())
-            return {
-                "filename": file.name,
-                "content": result['choices'][0]['message']['content'],
-                "usage": result['usage'],
-                "status": "success"
-            }
-            
-    except requests.exceptions.RequestException as e:
-        st.error(f"API request failed: {str(e)}")
-        if hasattr(e, 'response') and e.response:
-            st.error(f"API response: {e.response.text}")
-        return None
-    except Exception as e:
-        st.error(f"Error processing {file.name}: {str(e)}")
-        return None
-
-def mock_analysis(selected_files):
-    """Mock analysis function that generates random results"""
-    # Generate some random findings based on the number of files
-    num_files = len(selected_files)
-    
-    findings = [
-        f"Found {random.randint(1, 5)} compliance issues across documents",
-        f"Identified {random.randint(2, 8)} key regulations",
-        f"Detected {random.randint(0, 3)} potential violations"
-    ]
-    
-    # Generate some random recommendations
-    recommendations = [
-        "Review transaction thresholds for compliance",
-        "Verify customer identification procedures",
-        "Update internal policies to reflect recent regulatory changes",
-        "Conduct additional employee training on AML regulations",
-        "Implement enhanced due diligence for high-risk clients"
-    ]
-    
-    # Select a random subset of recommendations
-    num_recs = min(random.randint(1, 3), len(recommendations))
-    selected_recommendations = random.sample(recommendations, num_recs)
-    
-    return {
-        "files_analyzed": selected_files,
-        "findings": findings,
-        "recommendations": selected_recommendations,
-        "compliance_score": f"{random.randint(60, 95)}%",
-        "risk_level": random.choice(["Low", "Medium", "High"])
-    }
 
 # Main app
 def home_page():
@@ -192,7 +84,6 @@ def home_page():
                             st.rerun()
             
             with col3:
-                # Only show view button if file has been processed
                 if data['processed']:
                     if st.button("👁️ View", key=f"view_{filename}"):
                         st.session_state.viewing_file = filename
@@ -231,17 +122,27 @@ def home_page():
                 st.rerun()
         
         # Display the content
-        result = st.session_state.generated_results[st.session_state.viewing_file]
+        result = st.session_state.generated_results.get(st.session_state.viewing_file, {})
         st.markdown(f"### {st.session_state.viewing_file}")
-        st.markdown(result['content'])
+        
+        if 'content' in result:
+            st.markdown(result['content'])
+            
+            # Show usage stats if available
+            if 'usage' in result:
+                st.write("**API Usage Statistics:**")
+                st.json(result['usage'])
+        else:
+            st.warning("No analysis content available")
         
         # Download button
-        st.download_button(
-            label="⬇️ Download Results",
-            data=result['content'],
-            file_name=f"rules_{st.session_state.viewing_file}.txt",
-            key=f"dl_{st.session_state.viewing_file}"
-        )
+        if 'content' in result:
+            st.download_button(
+                label="⬇️ Download Results",
+                data=result['content'],
+                file_name=f"analysis_{st.session_state.viewing_file}.md",
+                key=f"dl_{st.session_state.viewing_file}"
+            )
     
     # Section 4: Transaction Data
     st.header("💳 Upload Transaction Data (CSV)")
@@ -265,27 +166,75 @@ def home_page():
     if st.button("🔍 Analyze Selected Files", type="primary", use_container_width=True):
         if not st.session_state.selected_files:
             st.warning("Please select at least one rules file")
+        elif not transaction_file:
+            st.warning("Please upload transaction data CSV")
         else:
             with st.spinner("Analyzing files..."):
-                # Call the mock analysis function
-                analysis_result = mock_analysis(st.session_state.selected_files)
+                # Call the profile function with selected files and transaction data
+                api_response = profile(
+                    selected_files=st.session_state.selected_files,
+                    transaction_file=transaction_file
+                )
                 
-                st.session_state.analysis_result = analysis_result
-                st.success("Analysis complete!")
-                
-                # Display results in a nicer format
-                st.subheader("Analysis Results")
-                st.write(f"**Files Analyzed:** {', '.join(analysis_result['files_analyzed'])}")
-                st.write(f"**Compliance Score:** {analysis_result['compliance_score']}")
-                st.write(f"**Risk Level:** {analysis_result['risk_level']}")
-                
-                st.subheader("Key Findings")
-                for finding in analysis_result['findings']:
-                    st.write(f"- {finding}")
-                
-                st.subheader("Recommendations")
-                for rec in analysis_result['recommendations']:
-                    st.write(f"- {rec}")
+                if api_response is None:
+                    st.error("Analysis failed - please check the logs")
+                else:
+                    try:
+                        # Process the API response
+                        content = api_response.get('choices', [{}])[0].get('message', {}).get('content', '')
+                        
+                        # Store results
+                        st.session_state.analysis_result = {
+                            "files_analyzed": st.session_state.selected_files,
+                            "findings": [],
+                            "recommendations": [],
+                            "content": content,
+                            "usage": api_response.get('usage', {}),
+                            "compliance_score": "N/A",
+                            "risk_level": "To be determined"
+                        }
+                        
+                        # Try to parse structured data from response
+                        try:
+                            parsed_content = json.loads(content)
+                            if isinstance(parsed_content, dict):
+                                if 'analysis_summary' in parsed_content:
+                                    summary = parsed_content['analysis_summary']
+                                    st.session_state.analysis_result.update({
+                                        "compliance_score": summary.get("overall_risk_score", "N/A"),
+                                        "risk_level": summary.get("overall_risk_level", "To be determined")
+                                    })
+                                if 'recommendations' in parsed_content:
+                                    st.session_state.analysis_result['recommendations'] = parsed_content['recommendations']
+                        except json.JSONDecodeError:
+                            # Content is not JSON, treat as plain text
+                            st.session_state.analysis_result['content'] = content
+                        
+                        st.success("Analysis complete!")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Error processing API response: {str(e)}")
+    
+    # Display analysis results if available
+    if st.session_state.analysis_result:
+        st.subheader("Analysis Results")
+        st.write(f"**Files Analyzed:** {', '.join(st.session_state.analysis_result['files_analyzed'])}")
+        st.write(f"**Compliance Score:** {st.session_state.analysis_result['compliance_score']}")
+        st.write(f"**Risk Level:** {st.session_state.analysis_result['risk_level']}")
+        
+        if st.session_state.analysis_result['content']:
+            st.subheader("Detailed Analysis")
+            st.markdown(st.session_state.analysis_result['content'])
+        
+        if st.session_state.analysis_result['recommendations']:
+            st.subheader("Recommendations")
+            for rec in st.session_state.analysis_result['recommendations']:
+                st.write(f"- {rec}")
+        
+        if 'usage' in st.session_state.analysis_result:
+            st.write("**API Usage Statistics:**")
+            st.json(st.session_state.analysis_result['usage'])
 
 # Run the app
 if __name__ == "__main__":

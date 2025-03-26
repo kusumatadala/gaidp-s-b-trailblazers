@@ -1,6 +1,7 @@
 streamlit  # For building the Streamlit app
 pandas     # For handling CSV data
 PyMuPDF    # For extracting text from PDF files
+PyPDF2
 python-docx  # For handling DOCX files
 requests  # For making HTTP requests
 plotly    # For data visualization (if used)
