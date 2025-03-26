@@ -3,7 +3,7 @@ please refer to the ppt in /artifacts/arch/ folder
 https://docs.google.com/presentation/d/1x5Eyx9FytLhgXfSW2VIWmJljzHQ26TZ-7c7ALM-ASG0/edit#slide=id.p1
 
 please find the demo here
-demo link: https://drive.google.com/drive/folders/1hm_rxYIfAjFxmV0Iybie9QrWJhMOq1GJ?q=sharedwith:public%20parent:1hm_rxYIfAjFxmV0Iybie9QrWJhMOq1GJ
+demo link: https://drive.google.com/file/d/1xuc3FKfKe6mK0zHSkg0QI8dgegAqO_Dp/view?usp=drive_link
 
 ## 🏃 How to Run
 1. Clone the repository,and switch to branch 'rules'

@@ -174,7 +174,7 @@ def home_page():
             progress_bar = st.progress(0)
             status_text = st.empty()
 
-            with st.spinner("Initializing analysis..."):
+            with st.spinner("est:3mins,please don't refresh..."):
                 status_text.text("Preparing files...")
                 time.sleep(0.5)
                 progress_bar.progress(10)
@@ -187,7 +187,7 @@ def home_page():
                 time.sleep(0.5)
                 progress_bar.progress(50)
 
-                status_text.text("Sending to DeepSeek API,it's gonna take quite some time...")
+                status_text.text("Hang on,Sending to DeepSeek API.....")
                 api_response = profile(
                     selected_files=st.session_state.selected_files,
                     transaction_file=transaction_file
@@ -206,22 +206,22 @@ def home_page():
                     progress_bar.empty()
                 else:
                     try:
-                        content = api_response.get('choices', [{}])[0].get('message', {}).get('content', '{}')
-
+                        content=api_response['choices'][0]['message']['content']
+                        analysis_data = api_response.get('analysis_data', {})
                         try:
-                            analysis_data = json.loads(content)
                             st.session_state.analysis_result = analysis_data
 
-                            if 'flagged_transactions' in analysis_data:
-                                total = len(analysis_data.get('transaction_analysis', {}).get('headers', []))
-                                flagged = len(analysis_data['flagged_transactions'])
+                            if 'flagged_list' in analysis_data:
+                                total = len(analysis_data['transactions_list'])
+                                flagged = len(analysis_data['flagged_list'])
                                 analysis_data['transaction_stats'] = {
                                     'total_transactions': total,
                                     'flagged_count': flagged,
                                     'failure_rate': round((flagged/total)*100, 2) if total > 0 else 0
                                 }
 
-                            analysis_data['transaction_file'] = transaction_file.name
+                            analysis_data['transaction_file'] = transaction_file
+                            analysis_data['rules_documents']=st.session_state.selected_files
 
                             progress_bar.progress(100)
                             status_text.success("Analysis complete!")
@@ -242,6 +242,7 @@ def home_page():
                     except Exception as e:
                         progress_bar.progress(100)
                         status_text.error(f"Error processing API response: {str(e)}")
+                        st.text_area("Raw API Response", value=content, height=300)
                         time.sleep(2)
                         status_text.empty()
                         progress_bar.empty()

@@ -45,6 +45,8 @@ def profile(
         # 1. Read the prompt
         with open("profiling_prompt.txt", "r", encoding='utf-8') as f:
             prompt = f.read().strip()
+        with open("system_prompt.txt", "r", encoding='utf-8') as f:
+            systemPrompt = f.read().strip()
         
         # 2. Process transaction data
         transaction_file.seek(0)
@@ -66,6 +68,10 @@ def profile(
         payload = {
             "model": st.secrets["MODEL"],
             "messages": [{
+                "role":"system",
+                "content":systemPrompt
+            },
+                {
                 "role": "user",
                 "content": f"{prompt}\n\nTRANSACTION DATA:\n{transaction_content}\n\nRULES DOCUMENTS:\n" + 
                           "\n\n".join(rules_content),
