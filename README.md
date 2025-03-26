@@ -1,4 +1,4 @@
-# 🚀 Project Name
+# 🚀 Gen-AI based Data Profiling
 please refer to the ppt in /artifacts/arch/ folder
 https://docs.google.com/presentation/d/1x5Eyx9FytLhgXfSW2VIWmJljzHQ26TZ-7c7ALM-ASG0/edit#slide=id.p1
 
@@ -34,4 +34,3 @@ demo link: https://drive.google.com/drive/folders/1hm_rxYIfAjFxmV0Iybie9QrWJhMOq
 - **Pranayee** - [GitHub](#) | [LinkedIn](#)
 - **Sricharith** - [GitHub](#) | [LinkedIn](#)
 - **Kusuma** - [GitHub](#) | [LinkedIn](#)
-- **Saha** - [GitHub](#) | [LinkedIn](#)
