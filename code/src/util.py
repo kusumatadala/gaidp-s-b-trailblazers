@@ -38,8 +38,8 @@ def extract_json_from_string(input_str):
     
     # Parse the JSON content into a Python dictionary
     try:
+        print(json_content)
         json_obj = json.loads(json_content)
-        print(json_obj)
         return json_obj
     except json.JSONDecodeError as e:
         raise ValueError(f"Failed to parse JSON: {e}")

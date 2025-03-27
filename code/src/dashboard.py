@@ -12,32 +12,29 @@ import json
 import pandas as pd
 from datetime import datetime
 
-def show_dashboard(analysis_data):
+def calculate_risk_level(risk_score):
+    """Calculate risk level based on risk score"""
+    if risk_score >= 70:
+        return "High"
+    elif risk_score >= 30:
+        return "Medium"
+    else:
+        return "Low"
+
+def show_dashboard():
     """
     Main function to render the compliance dashboard
-    
-    Args:
-        analysis_data: JSON string containing analysis results with:
-            - rules_list: List of rule objects
-            - transactions_list: List of analyzed transactions
-            - flagged_list: IDs of non-compliant transactions
-            - risk_scoring_definition: Risk calculation parameters
     """
     
     # --------------------------
     # DATA LOADING & VALIDATION
     # --------------------------
-    try:
-        # Parse JSON input
-        data = json.loads(analysis_data)
-    except json.JSONDecodeError:
-        st.error("Error: Invalid JSON data provided")
-        return
+    data = st.session_state.analysis_result.get('analysis_data', {})
 
     # --------------------------
     # PAGE CONFIGURATION
     # --------------------------
-    st.set_page_config(layout="wide", page_title="Auditor Assist 2.0")
+    st.set_page_config(layout="wide", page_title="Dashboard")
     
     # --------------------------
     # CSS STYLING
@@ -111,12 +108,19 @@ def show_dashboard(analysis_data):
     st.markdown('<div class="section-title">Risk Summary</div>', unsafe_allow_html=True)
     
     # Calculate risk counts from transactions
-    high_risk = sum(1 for tx in data.get('transactions_list', []) 
-                 if tx.get('risk_level', '').lower() == 'high')
-    medium_risk = sum(1 for tx in data.get('transactions_list', []) 
-                  if tx.get('risk_level', '').lower() == 'medium')
-    low_risk = sum(1 for tx in data.get('transactions_list', []) 
-                 if tx.get('risk_level', '').lower() == 'low')
+    high_risk = 0
+    medium_risk = 0
+    low_risk = 0
+    
+    for tx in data.get('transactions_list', []):
+        risk_level = calculate_risk_level(tx.get('risk_score', 0))
+        if risk_level == "High":
+            high_risk += 1
+        elif risk_level == "Medium":
+            medium_risk += 1
+        else:
+            low_risk += 1
+    
     total_transactions = len(data.get('transactions_list', []))
     flagged_count = len(data.get('flagged_list', []))
     
@@ -145,16 +149,17 @@ def show_dashboard(analysis_data):
     # Prepare transaction data for display
     transaction_display = []
     for tx in data.get('transactions_list', []):
-        # Concatenate violated rule IDs
-        violated_rules = ", ".join([vr.get('ruleid', '') 
-                                  for vr in tx.get('violated_rules_list', [])])
+        # Note: Corrected field name from 'voilated_rules_list' to 'violated_rules_list'
+        violated_rules = ", ".join(tx.get('voilated_rules_list', []))
+        risk_level = calculate_risk_level(tx.get('risk_score', 0))
         
         transaction_display.append({
             "Transaction ID": tx.get('transaction_id', ''),
-            "Risk Level": tx.get('risk_level', '').capitalize(),
+            "Risk Level": risk_level,
             "Violated Rules": violated_rules,
-            "Explanation": "; ".join(tx.get('explanation', [])),
-            "Risk Score": tx.get('risk_score', 0)
+            "Explanation": tx.get('explanation', ''),
+            "Risk Score": tx.get('risk_score', 0),
+            "Flagged": "Yes" if tx.get('flag', False) else "No"
         })
     
     # Display transaction table if data exists
@@ -163,12 +168,13 @@ def show_dashboard(analysis_data):
         
         # Color coding for risk levels
         def color_risk(val):
-            if val.lower() == "high": 
-                return 'color: #e74c3c; font-weight: bold;'
-            elif val.lower() == "medium": 
-                return 'color: #f39c12; font-weight: bold;'
-            elif val.lower() == "low": 
-                return 'color: #27ae60; font-weight: bold;'
+            if isinstance(val, str):
+                if val.lower() == "high": 
+                    return 'color: #e74c3c; font-weight: bold;'
+                elif val.lower() == "medium": 
+                    return 'color: #f39c12; font-weight: bold;'
+                elif val.lower() == "low": 
+                    return 'color: #27ae60; font-weight: bold;'
             return 'color: #7f8c8d;'
         
         # Apply styling and display table
@@ -190,7 +196,7 @@ def show_dashboard(analysis_data):
     # --------------------------
     # FAILURE TRANSACTIONS SECTION
     # --------------------------
-    st.markdown('<div class="section-title">Failure transactions</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Flagged Transactions</div>', unsafe_allow_html=True)
     
     # Create tabs for different failure details
     tab1, tab2, tab3 = st.tabs(["Review Status", "Actions", "Results"])
@@ -205,15 +211,32 @@ def show_dashboard(analysis_data):
                       if t.get('transaction_id') == tx_id), None)
             if tx:
                 st.markdown(f"• **{tx_id}**:")
-                for action in tx.get('remediation', []):
-                    st.markdown(f"  - {action}")
+                remediation = tx.get('remediation', 'None')
+                if isinstance(remediation, list):
+                    for action in remediation:
+                        st.markdown(f"  - {action}")
+                else:
+                    st.markdown(f"  - {remediation}")
     
     with tab3:  # Results
         for tx_id in data.get('flagged_list', []):
             tx = next((t for t in data.get('transactions_list', []) 
                       if t.get('transaction_id') == tx_id), None)
             if tx:
-                st.markdown(f"• **{tx_id}**: Found {len(tx.get('violated_rules_list', []))} violations")
+                st.markdown(f"• **{tx_id}**: Found {len(tx.get('voilated_rules_list', []))} violations")
+    
+    st.markdown("---")
+
+    # --------------------------
+    # RULES SECTION
+    # --------------------------
+    st.markdown('<div class="section-title">Applied Rules</div>', unsafe_allow_html=True)
+    
+    rules_df = pd.DataFrame(data.get('rules_list', []))
+    if not rules_df.empty:
+        st.table(rules_df[['ruleid', 'description', 'severity']])
+    else:
+        st.warning("No rules data available")
     
     st.markdown("---")
 
@@ -246,37 +269,19 @@ def show_dashboard(analysis_data):
 # if __name__ == "__main__":
 #     # Sample data matching the required JSON structure
 #     sample_data = {
-#         "rules_list": [
-#             {
-#                 "ruleid": "AML-001",
-#                 "description": "Transactions over $10,000 require additional verification",
-#                 "origin": "sample_regulation.txt, Section 5.2",
-#                 "severity": "high",
-#                 "remarks": "Applies to all cross-border transactions"
-#             }
-#         ],
-#         "transactions_list": [
-#             {
-#                 "transaction_id": "TX1001",
-#                 "violated_rules_list": [{"ruleid": "AML-001", "origin": "sample_regulation.txt, Section 5.2"}],
-#                 "flag": True,
-#                 "risk_score": 0.85,
-#                 "risk_level": "high",
-#                 "explanation": ["Amount exceeds threshold"],
-#                 "remediation": ["Freeze transaction"],
-#                 "remarks": "International transfer",
-#                 "risk_segments": ["cross-border"],
-#                 "suggestions": ["Enhanced due diligence"]
-#             }
-#         ],
-#         "flagged_list": ["TX1001"],
-#         "risk_scoring_definition": {
-#             "high_risk_threshold": 0.7,
-#             "medium_risk_threshold": 0.4,
-#             "low_risk_threshold": 0.1,
-#             "calculation_method": "weighted_violation_score"
+#         'analysis_data': {
+#             'rules_list': [
+#                 {'ruleid': 'GEN001', 'description': 'Transaction date must not be in the future.', 'origin': 'Comprehensive Rules for Transaction Data Audit in the USA, General Data Integrity Rules', 'severity': 'High', 'remarks': 'Reject transactions with future dates.'},
+#                 # ... (other rules)
+#             ],
+#             'transactions_list': [
+#                 {'transaction_id': '6355745', 'voilated_rules_list': [], 'flag': False, 'risk_score': 0, 'explanation': 'No rules violated.', 'remediation': 'do something', 'remarks': 'Valid transaction.', 'risk_segments': {'credit_risk': 0, 'transaction_risk': 0, 'market_risk': 0, 'operational_risk': 0}, 'sugggestions': 'arey something man'},
+#                 # ... (other transactions)
+#             ],
+#             'flagged_list': ['6143225', '6058140'],
+#             'risk_scoring_definition': 'Risk scoring is based on the severity of violated rules and the potential impact on financial integrity. Scores range from 0 (no risk) to 100 (critical risk). Each risk segment (credit, transaction, market, operational) is scored individually, and an overall score is calculated as the average of these segments.'
 #         }
 #     }
     
-#     # Convert to JSON and render
-#     render_dashboard(json.dumps(sample_data))
+#     st.session_state.analysis_result = sample_data
+#     show_dashboard()
